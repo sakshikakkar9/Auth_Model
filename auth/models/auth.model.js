@@ -1,64 +1,73 @@
-const mongoose = require('mongoose');
+import { MongoClient } from "mongodb";
+import dotenv from "dotenv"
+dotenv.config({path:"E:\practice\backend\.env"})
 
-/**
- * USER (AUTH) SCHEMA
- * This schema defines how a user document will look in MongoDB
- */
-const userSchema = new mongoose.Schema(
-  {
-    // User full name
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
+const client = new MongoClient(process.env.MONGO);
 
-    // User email (unique identifier)
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true
-    },
+const db = client.db("auth");
 
-    // Encrypted password (never returned in queries)
-    password: {
-      type: String,
-      required: true,
-      minlength: 6,
-      select: false
-    },
+const userValidator = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["email", "passwordHash", "createdAt"],
 
-    // Role for authorization (scalable)
-    role: {
-      type: String,
-      enum: ['user', 'admin'],
-      default: 'user'
-    },
+    properties: {
+      name: { bsonType: "string" },
 
-    // Soft delete / block user
-    isActive: {
-      type: Boolean,
-      default: true
+      email: {
+        bsonType: "string",
+        description: "Unique user email"
+      },
+
+      passwordHash: {
+        bsonType: "string",
+        description: "Hashed password"
+      },
+
+      role: {
+        bsonType: "string",
+        enum: ["user", "admin", "super_admin"]
+      },
+
+      isVerified: { bsonType: "bool" },
+
+      isActive: { bsonType: "bool" },
+
+      createdAt: { bsonType: "date" },
+
+      updatedAt: { bsonType: "date" }
     }
-  },
-  {
-    // Automatically adds createdAt & updatedAt
-    timestamps: true
   }
-);
+};
 
-/**
- * Indexes for performance
- * Improves login speed (email lookup)
- */
-userSchema.index({ email: 1 });
+export async function applyUserValidator() {
+  try {
+    console.log("🟢 Creating users collection with schema validator...");
 
-/**
- * Create User Model
- * MongoDB collection name will be: "users"
- */
-const User = mongoose.model('User', userSchema);
+    // 🔹 Create collection with validator
+    await db.createCollection("users", {
+      validator: userValidator,
+      validationLevel: "strict",
+      validationAction: "error"
+    });
 
-module.exports = User;
+    console.log("✅ Users collection created successfully");
+
+    // 🔒 Unique email index
+    await db.collection("users").createIndex(
+      { email: 1 },
+      { unique: true }
+    );
+
+    console.log("✅ Unique index on email created");
+
+  } catch (err) {
+    if (err.code === 48) {
+      console.log("ℹ️ Users collection already exists");
+    } else {
+      console.error("❌ Failed to create users collection:", err.message);
+    }
+  }
+}
+
+applyUserValidator();

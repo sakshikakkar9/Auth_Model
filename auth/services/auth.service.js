@@ -1,60 +1,37 @@
-const User = require('../models/auth.model.js');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+import { MongoClient } from "mongodb";
+import dotenv from "dotenv"
+dotenv.config({path:"../../.env"})
 
-const registerUser = async ({ name, email, password }) => {
-  const existingUser = await User.findOne({ email });
+const client = new MongoClient(process.env.MONGO);
 
-  if (existingUser) {
-    throw new Error('User already exists');
-  }
+const db = client.db("auth");
 
-  const salt = await bcrypt.genSalt(10);
-  const hashedPassword = await bcrypt.hash(password, salt);
+const usersCollection = db.collection("users")
 
-  const user = await User.create({
-    name,
+export async function createUser({ email, name, password }) {
+  // 1️⃣ Check if user exists
+  const existingUser = await usersCollection.findOne({ email });
+  if (existingUser) throw new Error("User already exists");
+
+  // 2️⃣ Hash password
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const now = new Date();
+
+  // 3️⃣ Prepare new user document
+  const newUser = {
     email,
-    password: hashedPassword
-  });
-
-  return {
-    id: user._id,
-    name: user.name,
-    email: user.email
+    name,
+    passwordHash: hashedPassword,
+    role: "user",
+    isVerified: false,
+    createdAt: now,
+    updatedAt: now,
   };
-};
 
-const loginUser = async ({ email, password }) => {
-  const user = await User.findOne({ email });
+  // 4️⃣ Insert into DB
+  const result = await usersCollection.insertOne(newUser);
 
-  if (!user) {
-    throw new Error('Invalid email or password');
-  }
-
-  const isPasswordMatch = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordMatch) {
-    throw new Error('Invalid email or password');
-  }
-
-  const token = jwt.sign(
-    { userId: user._id },
-    process.env.JWT_SECRET,
-    { expiresIn: '1d' }
-  );
-
-  return {
-    token,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email
-    }
-  };
-};
-
-module.exports = {
-  registerUser,
-  loginUser
-};
+  // 5️⃣ Return user info
+  return { ...newUser, id: result.insertedId };
+}
+// createUser()

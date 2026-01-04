@@ -1,60 +1,30 @@
-const authService = require('../services/auth.service.js');
+import { createUser } from "../services/auth.service.js";
 
-const register = async (req, res) => {
+export const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { email, password, name } = req.body;
+    if (!email || !password || !name)
+      return res.status(400).json({ success: false, message: "All fields are required" });
 
-    if (!name || !email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'All fields are required'
-      });
-    }
-
-    const user = await authService.registerUser({ name, email, password });
+    const user = await createUser({ email, name, password });
 
     res.status(201).json({
       success: true,
-      message: 'User registered successfully',
-      data: user
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      },
     });
-
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
+  } catch (err) {
+    if (err.message === "User already exists") {
+      return res.status(409).json({ success: false, message: err.message });
     }
-
-    const result = await authService.loginUser({ email, password });
-
-    res.status(200).json({
-      success: true,
-      message: 'Login successful',
-      data: result
-    });
-
-  } catch (error) {
-    res.status(401).json({
-      success: false,
-      message: error.message
-    });
+    console.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
-};
-
-module.exports = {
-  register,
-  login
 };
